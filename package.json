@@ -10,15 +10,27 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
+    "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.3",
-    "redis": "^4.8.2"
+    "redis": "^4.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Harshavardhan21112005/project_clubs.git"
+  },
+  "keywords": [],
+  "bugs": {
+    "url": "https://github.com/Harshavardhan21112005/project_clubs/issues"
+  },
+  "homepage": "https://github.com/Harshavardhan21112005/project_clubs#readme"
 }
