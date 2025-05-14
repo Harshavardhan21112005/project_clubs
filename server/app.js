@@ -21,12 +21,13 @@ const studentRoutes = require("./routes/studentRoutes");
 const clubRoutes = require("./routes/clubRoutes");
 const eventRoutes = require("./routes/eventRoutes");
 
+// Route mounting
 app.use("/api/auth", authRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/clubs", clubRoutes);
 app.use("/api/events", eventRoutes);
 
-// Error handler
+// Global Error Handler
 const errorHandler = require("./middleware/errorHandler");
 app.use(errorHandler);
 

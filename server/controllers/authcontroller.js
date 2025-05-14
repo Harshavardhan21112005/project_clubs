@@ -1,91 +1,100 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const redis = require('redis');
-const redisClient = redis.createClient();
-const { findUserByUsername, updatePassword, updateOTP } = require('../models/user');
-
 require('dotenv').config();
+
+const redisClient = redis.createClient({
+  url: process.env.REDIS_URL
+});
+
 redisClient.connect();
 
-// 🔐 Login controller
+const {
+  findUserByEmail,
+  findAdminByEmail,
+  updateUserOTP,
+  updateUserPassword,
+  updateAdminPassword
+} = require('../models/user');
+
+// 🔐 Login Controller
 const login = async (req, res) => {
   const { username, password } = req.body;
 
   try {
-    console.log(`➡️ Login attempt: ${username} ${password}`);
-    const user = await findUserByUsername(username);
+    let user = await findUserByEmail(username);
+    let role = 'user';
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      user = await findAdminByEmail(username);
+      role = 'admin';
     }
 
-    const valid = password === user.password;
-    console.log(`✅ Password valid? ${valid}`);
+    if (!user) {
+      return res.status(404).json({ message: 'User/Admin not found' });
+    }
 
-    if (!valid) {
+    const isValid = await bcrypt.compare(password, user.password).catch(() => false) || password === user.password;
+
+    if (!isValid) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({}, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
+    const token = jwt.sign({ email: username, role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const redisKey = role === 'user' ? user.user_id : user.adm_id;
+    await redisClient.set(redisKey, token, 'EX', 3600);
 
-    if (redisClient && redisClient.set && user?.user_id) {
-      await redisClient.set(user.user_id, token, 'EX', 3600);
-    }
-
-    res.json({ token, user });
+    res.json({ token, user: { ...user, role } });
   } catch (err) {
     console.error('❌ Login Error:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-// 🔐 Forgot Password – Generate and "send" OTP
+// 🔐 Combined Forgot Password (OTP + Reset)
 const forgotPassword = async (req, res) => {
-  const { username } = req.body;
+  const { username, otp, newPassword } = req.body;
 
   try {
-    const user = await findUserByUsername(username);
+    const user = await findUserByEmail(username);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-    await updateOTP(user.user_id, otp);
+    // Step 1: Send OTP
+    if (!otp && !newPassword) {
+      const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+      await updateUserOTP(user.user_id, generatedOTP);
+      console.log(`📧 OTP sent to ${username}: ${generatedOTP}`);
+      return res.json({ message: 'OTP sent to your email (simulated).' });
+    }
 
-    console.log(`📧 OTP for ${username} is: ${otp}`); // Simulate email/SMS
+    // Step 2: Verify OTP & Reset Password
+    if (otp && newPassword) {
+      if (user.otp !== otp) {
+        return res.status(400).json({ message: 'Invalid OTP' });
+      }
 
-    res.json({ message: 'OTP sent to your registered email (simulated).' });
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      await updateUserPassword(user.user_id, hashedPassword);
+      await updateUserOTP(user.user_id, null);
+
+      const admin = await findAdminByEmail(username);
+      if (admin) {
+        await updateAdminPassword(admin.adm_id, hashedPassword);
+      }
+
+      return res.json({ message: 'Password reset successful.' });
+    }
+
+    return res.status(400).json({ message: 'Invalid request. Provide OTP and new password or nothing.' });
   } catch (err) {
     console.error('❌ Forgot Password Error:', err);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
 
-// 🔐 Reset Password using OTP
-const resetPassword = async (req, res) => {
-  const { username, otp, newPassword } = req.body;
-
-  try {
-    const user = await findUserByUsername(username);
-    if (!user || user.otp !== otp) {
-      return res.status(400).json({ message: 'Invalid OTP or user' });
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await updatePassword(user.user_id, hashedPassword);
-    await updateOTP(user.user_id, null); // Clear OTP after use
-
-    res.json({ message: 'Password updated successfully.' });
-  } catch (err) {
-    console.error('❌ Reset Password Error:', err);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-// ✅ Export all controllers
 module.exports = {
   login,
-  forgotPassword,
-  resetPassword,
+  forgotPassword
 };

@@ -1,23 +1,36 @@
-const pool = require('../config/db'); // adjust path if needed
+const pool = require('../config/db');
 
-const findUserByUsername = async (username) => {
-  const query = 'SELECT * FROM "Users" WHERE email = $1';
-  const result = await pool.query(query, [username]);
+// 🔍 Find user by email
+async function findUserByEmail(email) {
+  const result = await pool.query('SELECT * FROM "Users" WHERE email = $1', [email]);
   return result.rows[0];
-};
+}
 
-const updatePassword = async (user_id, newPassword) => {
-  const query = 'UPDATE "Users" SET password = $1 WHERE user_id = $2';
-  await pool.query(query, [newPassword, user_id]);
-};
+// 🔍 Find admin by email
+async function findAdminByEmail(email) {
+  const result = await pool.query('SELECT * FROM "Admin" WHERE email = $1', [email]);
+  return result.rows[0];
+}
 
-const updateOTP = async (user_id, otp) => {
-  const query = 'UPDATE "Users" SET otp = $1 WHERE user_id = $2';
-  await pool.query(query, [otp, user_id]);
-};
+// ✏️ Update user OTP
+async function updateUserOTP(userId, otp) {
+  await pool.query('UPDATE "Users" SET otp = $1 WHERE user_id = $2', [otp, userId]);
+}
+
+// ✏️ Update user password
+async function updateUserPassword(userId, hashedPassword) {
+  await pool.query('UPDATE "Users" SET password = $1 WHERE user_id = $2', [hashedPassword, userId]);
+}
+
+// ✏️ Update admin password
+async function updateAdminPassword(adminId, hashedPassword) {
+  await pool.query('UPDATE "Admin" SET password = $1 WHERE adm_id = $2', [hashedPassword, adminId]);
+}
 
 module.exports = {
-  findUserByUsername,
-  updatePassword,
-  updateOTP,
+  findUserByEmail,
+  findAdminByEmail,
+  updateUserOTP,
+  updateUserPassword,
+  updateAdminPassword
 };
