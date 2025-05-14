@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const redis = require('redis');
+const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 const redisClient = redis.createClient({
@@ -51,9 +52,9 @@ const login = async (req, res) => {
   }
 };
 
-// 🔐 Combined Forgot Password (OTP + Reset)
+// Forgot Password Controller
 const forgotPassword = async (req, res) => {
-  const { username, otp, newPassword } = req.body;
+  const { username } = req.body;
 
   try {
     const user = await findUserByEmail(username);
@@ -61,33 +62,33 @@ const forgotPassword = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Step 1: Send OTP
-    if (!otp && !newPassword) {
-      const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
-      await updateUserOTP(user.user_id, generatedOTP);
-      console.log(`📧 OTP sent to ${username}: ${generatedOTP}`);
-      return res.json({ message: 'OTP sent to your email (simulated).' });
-    }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    await updateUserOTP(user.user_id, otp);
 
-    // Step 2: Verify OTP & Reset Password
-    if (otp && newPassword) {
-      if (user.otp !== otp) {
-        return res.status(400).json({ message: 'Invalid OTP' });
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
       }
+    });
 
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-      await updateUserPassword(user.user_id, hashedPassword);
-      await updateUserOTP(user.user_id, null);
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: 'Password Reset OTP',
+      text: `Your OTP for password reset is: ${otp}.`
+    };
 
-      const admin = await findAdminByEmail(username);
-      if (admin) {
-        await updateAdminPassword(admin.adm_id, hashedPassword);
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log(error);
+        return res.status(500).json({ message: 'Failed to send OTP' });
       }
+      console.log('OTP sent: ' + info.response);
+      res.json({ message: 'OTP sent to your registered email.' });
+    });
 
-      return res.json({ message: 'Password reset successful.' });
-    }
-
-    return res.status(400).json({ message: 'Invalid request. Provide OTP and new password or nothing.' });
   } catch (err) {
     console.error('❌ Forgot Password Error:', err);
     res.status(500).json({ message: 'Internal server error' });
